@@ -1,60 +1,57 @@
-// Vector Addition from PPMP
+// Vector Addition in CUDA
 
-#include <cuda.h>
-#include <stdio.h>
-#include <time.h>
 #include <stdlib.h>
+#include <assert.h>
+#include <stdio.h>
 
-__global__ void vecAddKernel(float* A, float* B, float* C, int n) {
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
-    if (i < n) 
-        C[i] = A[i] + B[i];
+__global__ void vector_add(int* a, int* b, int* c, int N) {
+    // calculate global thread ID
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // Range Check
+    if (tid < N)
+        c[tid] = a[tid] + b[tid];
 }
 
-void vecAdd(float* h_A, float* h_B, float* h_C, int n) {
-    int size = n * sizeof(float); // size of the memory to be allocated
-    float *d_A, *d_B, *d_C; // device memory pointers
-
-    cudaMalloc((void**)&d_A, size);
-    cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
-    cudaMalloc((void**)&d_B, size);
-    cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
-
-    cudaMalloc((void**)&d_C, size);
-
-    vecAddKernel <<< ceil(n / 256.0), 256 >>> (d_A, d_B, d_C, n);
-
-    cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
-
-    // Free device memory for A, B, C
-    cudaFree(d_A);
-    cudaFree(d_B);
-    cudaFree(d_C);
-}
-
-int main(void) {
-    int N = 1000; // num of elements
-    size_t size = N * sizeof(float);
-
-    // allocate host memory
-    float* h_A = (float*)malloc(size);
-    float* h_B = (float*)malloc(size);
-    float* h_C = (float*)malloc(size);
-
-    // Initialize host arrays
+void init_array(int* a, int N) {
     for (int i = 0; i < N; i++) {
-        h_A[i] = rand() / float(RAND_MAX);
-        h_B[i] = rand() / float(RAND_MAX);
+        a[i] = rand() % 100;
     }
+}
 
-    clock_t start_time = clock();
-    vecAdd(h_A, h_B, h_C, N);
-    clock_t end_time = clock();
+// Verify the Vector Addition computation on CPU
+void verify_solution(int* a, int* b, int* c, int N) {
+    for (int i = 0; i < N; i++) {
+        assert(a[i] + b[i] == c[i]);
+    }
+}
 
-    printf("Time Spent: %f secs\n", (double)(end_time - start_time) / CLOCKS_PER_SEC);
-    for (int i = 0; i < 10; i++) 
-        printf("h_C[%d] = %f\n", i, h_C[i]);
+int main() {
+    // Vector size (2^20: 1048576)
+    int N = 1 << 20;
+    size_t bytes = N * sizeof(bytes);
+    
+    // Allocate memory 
+    int* a, *b, *c;
+    cudaMallocManaged(&a, bytes);
+    cudaMallocManaged(&b, bytes);
+    cudaMallocManaged(&c, bytes);
+    
+    // Initialize the vectors
+    init_array(a, N);
+    init_array(b, N);
+    
+    //Initialize out CTA and Grid dimension
+    int THREADS = 256;
+    int BLOCKS = (N + THREADS - 1) / THREADS; // 4096 = (1048576 + 255) / 256
 
-    free(h_A); free(h_B); free(h_C);
+    // Call the kernel
+    vector_add <<< BLOCKS, THREADS >>> (a, b, c, N); 
+    cudaDeviceSynchronize();
+    
+    // verify solution
+    verify_solution(a, b, c, N);
+    printf("PROGRAM COMPLETED CORRECTLY\n");
+    
     return 0;
 }
