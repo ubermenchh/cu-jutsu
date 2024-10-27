@@ -51,13 +51,20 @@ void matrix_transpose(float* out, float* in, int X, int Y) {
 }
 
 void softmax(float* out, float* in, int X, int Y) {
-    float exp_sum = 0.0f;
-    for (int i = 0; i < X*Y; i++) {
-        exp_sum += expf(in[i]);
+    float max = -INFINITY;
+    float denom = 0.f;
+
+    float new_max, new_denom;
+    for (int j = 0; j < X*Y; j++) {
+        new_max = fmax(max, in[j]);
+        new_denom = denom * expf(max - new_max) + expf(in[j] - new_max);
+
+        max = new_max;
+        denom = new_denom;
     }
 
     for (int i = 0; i < X*Y; i++) {
-        out[i] = expf(in[i]) / exp_sum;
+        out[i] = expf(in[i] - max) / denom;
     }
 }
 
@@ -84,10 +91,6 @@ int main() {
     matrix_transpose(Kt, K, N, d);
     matmul(Q, Kt, QKt, N, d, N);
     softmax(O1, QKt, N, N);
-    matrix_scalar_div(O2, O1, sqrtf(d), N, N);
-    matmul(O2, V, O, N, N, d);
-    
-    print_matrix(O, N, d);
 
     free(Q); free(K); free(V);
 }
